@@ -16,3 +16,13 @@ __pycache__/
 
 # Ignoring the trained keras model
 *.keras
+
+# Ignoring model result files 
+data_analysis/
+knn/
+cnn/
+engineered_*
+test_engineered_df.csv
+pca_summary_*
+processed_dataset.csv
+
