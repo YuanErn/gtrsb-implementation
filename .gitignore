@@ -1,0 +1,15 @@
+# Ignore virtual environment folders and image files
+venv/
+*/venv/
+train/
+test/
+
+# Python cache files
+__pycache__/
+*.py[cod]
+
+# Environment variables
+.env
+
+
+
