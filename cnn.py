@@ -2,52 +2,70 @@ import tensorflow as tf
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, Dropout
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras.callbacks import EarlyStopping
+from sklearn.utils.class_weight import compute_class_weight
+import numpy as np
 import pandas as pd
 import os
 
-def train_cnn(train_dir, metadata_path, input_shape=(64, 64, 3), batch_size=32, epochs=10):
+def create_data_generators(train_dir, metadata_path, input_shape=(64, 64), batch_size=32, validation_split=0.2, seed=42):
     """
-    Trains a CNN model using images and metadata.
-
-    Args:
-        train_dir (str): Path to the directory containing training images.
-        metadata_path (str): Path to the CSV file containing metadata with image paths and labels.
-        input_shape (tuple): Shape of the input images (default is (64, 64, 3)).
-        batch_size (int): Batch size for training (default is 32).
-        epochs (int): Number of epochs to train the model (default is 10).
-
-    Returns:
-        model: The trained CNN model.
+    Creates training and validation data generators. This preprocessing will be applied to the images for
+    training and validation.
     """
-    # Load metadata
     metadata = pd.read_csv(metadata_path)
     metadata['image_path'] = metadata['image_path'].apply(lambda x: os.path.join(train_dir, x))
+    metadata['ClassId'] = metadata['ClassId'].astype(str)  # Ensure labels are strings
 
-    # Data generators for training and validation
+    # Initialize ImageDataGenerator with validation split 
     datagen = ImageDataGenerator(
-        rescale=1.0 / 255.0,  # Normalize pixel values
-        validation_split=0.2  # Split 20% of data for validation
+    rescale=1.0 / 255.0,
+    validation_split=validation_split
     )
 
+    # Create training data generator
     train_generator = datagen.flow_from_dataframe(
         metadata,
         x_col='image_path',
         y_col='ClassId',
-        target_size=input_shape[:2],
+        target_size=input_shape,
         batch_size=batch_size,
-        class_mode='sparse',
-        subset='training'
+        class_mode='categorical',
+        subset='training',
+        seed=seed
     )
 
+    # Create validation data generator
     val_generator = datagen.flow_from_dataframe(
         metadata,
         x_col='image_path',
         y_col='ClassId',
-        target_size=input_shape[:2],
+        target_size=input_shape,
         batch_size=batch_size,
-        class_mode='sparse',
-        subset='validation'
+        class_mode='categorical',
+        subset='validation',
+        seed=seed
     )
+
+    num_classes = len(train_generator.class_indices)
+
+    return train_generator, val_generator, num_classes
+
+def train_cnn(train_generator, val_generator, input_shape=(64, 64, 3), epochs=25):
+    """
+    Trains a CNN model using images and metadata.
+    """
+    num_classes = len(train_generator.class_indices)
+
+    # Calculate class weights
+    class_labels = list(train_generator.class_indices.values())
+    class_weights = compute_class_weight(
+        class_weight='balanced',
+        classes=np.array(class_labels),
+        y=train_generator.classes
+    )
+    class_weight_dict = dict(enumerate(class_weights))
+    print("Class weights:", class_weight_dict)
 
     # Define the CNN model
     model = Sequential([
@@ -58,29 +76,59 @@ def train_cnn(train_dir, metadata_path, input_shape=(64, 64, 3), batch_size=32, 
         Flatten(),
         Dense(128, activation='relu'),
         Dropout(0.5),
-        Dense(len(train_generator.class_indices), activation='softmax')
+        Dense(num_classes, activation='softmax')
     ])
 
     # Compile the model
     model.compile(optimizer='adam',
-                  loss='sparse_categorical_crossentropy',
+                  loss='categorical_crossentropy',
                   metrics=['accuracy'])
 
-    # Train the model
+    early_stop = EarlyStopping(monitor='val_loss', patience=5, restore_best_weights=True)
+
+    # Train the model with class weights
     model.fit(
         train_generator,
         validation_data=val_generator,
-        epochs=epochs
+        epochs=epochs,
+        class_weight=class_weight_dict,
+        callbacks=[early_stop]
     )
 
+
     # Save the trained model
-    model.save('cnn_model.h5')
-    print("Model saved as cnn_model.h5")
+    os.makedirs('cnn', exist_ok=True)
+    model.save('cnn/cnn_model.keras')
+    print("Model saved as cnn_model.keras")
 
     return model
 
-# Example usage
-if __name__ == "__main__":
-    train_dir = '/Users/yuanern/Documents/unimelb/Machine Learning/assignment 2/2025_A2/train'
-    metadata_path = '/Users/yuanern/Documents/unimelb/Machine Learning/assignment 2/2025_A2/trainFeatures/train_metadata.csv'
-    train_cnn(train_dir, metadata_path)
+def predict_images(model, image_dir, metadata_path, input_shape=(64, 64), batch_size=32):
+    """
+    Generates predictions for images using a trained model.
+    """
+    # Load metadata
+    metadata = pd.read_csv(metadata_path)
+    metadata['image_path'] = metadata['image_path'].apply(lambda x: os.path.join(image_dir, x))
+
+    # Data generator for prediction
+    datagen = ImageDataGenerator(
+    rescale=1.0 / 255.0,
+    validation_split=0.2
+    )
+
+    prediction_generator = datagen.flow_from_dataframe(
+        dataframe=metadata,
+        x_col='image_path',
+        y_col=None,
+        target_size=input_shape,
+        batch_size=batch_size,
+        class_mode=None,
+        shuffle=False
+    )
+    # Generate predictions
+
+    early_stop = EarlyStopping(monitor='val_loss', patience=7, restore_best_weights=True)
+    predictions = model.predict(prediction_generator)
+
+    return predictions
