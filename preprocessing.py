@@ -6,6 +6,7 @@ from sklearn.decomposition import PCA
 from sklearn.feature_selection import VarianceThreshold
 import numpy as np
 import warnings
+import os
 
 def merge_datasets(metadata_path, hog_path, color_hist_path, additional_feat_path):
     """
@@ -34,6 +35,7 @@ def plot_class_distribution(df, output_path='data_analysis/class_distribution.pn
     """
     Plots and saves a histogram of class label distribution.
     """
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
     sns.set(style="whitegrid")
     fig, ax = plt.subplots(figsize=(10, 6))
 
@@ -231,7 +233,7 @@ plot_class_distribution(merged_df)
 pca_summary, variance_df, top_features_loading, loading_df, pca_model, scaler_model = PCA_transform(merged_df, variance_exp=0.95)
 pca_summary.to_csv('pca_summary_features.csv', index=False)
 variance_df.to_csv('pca_summary_pc.csv', index=False)
-plot_pca_loadings_heatmap(loading_df, "loadings_heatmap.png")
+plot_pca_loadings_heatmap(loading_df, "knn/loadings_heatmap.png")
 
 # Making a new DataFrame with PCA components (selected top contributing features)
 processed_df = merged_df[['image_path', 'ClassId'] + top_features_loading]

@@ -1,13 +1,13 @@
 from knn import knn_classifier
+from cnn import train_cnn, predict_images, create_data_generators
 import pandas as pd
 
 '''
 This is the main entry for the models and evaluation. Preprocessing is run beforehand and just has to run once to save on processing time.
 '''
 def main():
-    run_knn()
+    run_cnn()
     return
-
 
 def run_knn():
     '''
@@ -34,7 +34,41 @@ def run_knn():
     submission_df.to_csv('knn/submission.csv', index=False)
     return
 
+def run_cnn():
+    '''
+    This function trains and evaluates the CNN model
+    '''
+    train_dir = '/Users/yuanern/Documents/unimelb/Machine Learning/assignment 2/gtrsb-implementation/train'
+    metadata_path = '/Users/yuanern/Documents/unimelb/Machine Learning/assignment 2/gtrsb-implementation/trainFeatures/train_metadata.csv'
+    input_shape = (64, 64, 3)
+    batch_size = 32
+    epochs = 100
 
+    # Create data generators
+    train_generator, val_generator, num_classes = create_data_generators(
+        train_dir, metadata_path, input_shape[:2], batch_size
+    )
+
+    # Train the CNN model
+    model = train_cnn(train_generator, val_generator, input_shape, epochs)
+
+    # Example prediction (optional)
+    test_dir = '/Users/yuanern/Documents/unimelb/Machine Learning/assignment 2/gtrsb-implementation/test'
+    test_metadata_path = '/Users/yuanern/Documents/unimelb/Machine Learning/assignment 2/gtrsb-implementation/testFeatures/test_metadata.csv'
+    predictions = predict_images(model, test_dir, test_metadata_path, input_shape[:2], batch_size)
+
+    # Load test metadata to get the IDs
+    test_metadata = pd.read_csv(test_metadata_path)
+
+    # Create a DataFrame with 'id' and 'ClassId'
+    submission_df = pd.DataFrame({
+        'id': test_metadata['id'],
+        'ClassId': predictions.argmax(axis=1)  # Convert probabilities to class indices
+    })
+
+    # Save the DataFrame to a CSV file
+    submission_df.to_csv('cnn/cnn_predictions.csv', index=False)
+    print("Predictions saved to cnn_predictions.csv")
 
 if __name__ == "__main__":
     main()
