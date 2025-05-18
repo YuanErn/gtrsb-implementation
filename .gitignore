@@ -21,6 +21,7 @@ __pycache__/
 data_analysis/
 knn/
 cnn/
+svm/
 engineered_*
 test_engineered_df.csv
 pca_summary_*

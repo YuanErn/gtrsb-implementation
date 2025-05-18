@@ -1,17 +1,21 @@
 import tensorflow as tf
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, Dropout
+from tensorflow.keras.layers import (
+    Conv2D, MaxPooling2D, AveragePooling2D,
+    Flatten, Dense, Dropout, BatchNormalization, Activation
+)
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from tensorflow.keras.callbacks import EarlyStopping
 from sklearn.utils.class_weight import compute_class_weight
 import numpy as np
 import pandas as pd
 import os
+import keras
 
 def create_data_generators(train_dir, metadata_path, input_shape=(64, 64), batch_size=32, validation_split=0.2, seed=42):
     """
     Creates training and validation data generators. This preprocessing will be applied to the images for
-    training and validation.
+    training.
     """
     metadata = pd.read_csv(metadata_path)
     metadata['image_path'] = metadata['image_path'].apply(lambda x: os.path.join(train_dir, x))
@@ -20,6 +24,7 @@ def create_data_generators(train_dir, metadata_path, input_shape=(64, 64), batch
     # Initialize ImageDataGenerator with validation split 
     datagen = ImageDataGenerator(
     rescale=1.0 / 255.0,
+    zoom_range=0.1,
     validation_split=validation_split
     )
 
@@ -65,22 +70,39 @@ def train_cnn(train_generator, val_generator, input_shape=(64, 64, 3), epochs=25
         y=train_generator.classes
     )
     class_weight_dict = dict(enumerate(class_weights))
-    print("Class weights:", class_weight_dict)
 
     # Define the CNN model
-    model = Sequential([
-        Conv2D(32, (3, 3), activation='relu', input_shape=input_shape),
-        MaxPooling2D(pool_size=(2, 2)),
-        Conv2D(64, (3, 3), activation='relu'),
-        MaxPooling2D(pool_size=(2, 2)),
-        Flatten(),
-        Dense(128, activation='relu'),
-        Dropout(0.5),
-        Dense(num_classes, activation='softmax')
-    ])
+    model = Sequential()
+    
+    # First block: 32 filters @ 3×3 (two Convs + Activations), then Pool + Dropout
+    model.add(Conv2D(32, (3, 3), padding='same', input_shape=input_shape))
+    model.add(Activation('relu'))
+    model.add(Conv2D(32, (3, 3), padding='same'))
+    model.add(Activation('relu'))
+    model.add(MaxPooling2D(pool_size=(2, 2)))
+    model.add(Dropout(0.25))
+    
+    # Next blocks: doubling filters each time (64, 128, 256…)
+    for filters in [64, 128, 256]:
+        model.add(Conv2D(filters, (3, 3), padding='same'))
+        model.add(Activation('relu'))
+        model.add(Conv2D(filters, (3, 3), padding='same'))
+        model.add(Activation('relu'))
+        model.add(MaxPooling2D(pool_size=(2, 2)))
+        model.add(Dropout(0.25))
+    
+    # Flatten → Dense head → final softmax
+    model.add(Flatten())
+    model.add(Dense(256))
+    model.add(Activation('relu'))
+    model.add(Dropout(0.5))
+    model.add(Dense(num_classes))
+    model.add(Activation('softmax'))
+
 
     # Compile the model
-    model.compile(optimizer='adam',
+    opt = keras.optimizers.RMSprop(learning_rate=0.0001, weight_decay=1e-6)
+    model.compile(optimizer=opt,
                   loss='categorical_crossentropy',
                   metrics=['accuracy'])
 
@@ -88,13 +110,12 @@ def train_cnn(train_generator, val_generator, input_shape=(64, 64, 3), epochs=25
 
     # Train the model with class weights
     model.fit(
-        train_generator,
-        validation_data=val_generator,
-        epochs=epochs,
-        class_weight=class_weight_dict,
-        callbacks=[early_stop]
-    )
-
+    train_generator,
+    validation_data=val_generator,
+    epochs=epochs,
+    class_weight=class_weight_dict,
+    callbacks=[early_stop]
+)
 
     # Save the trained model
     os.makedirs('cnn', exist_ok=True)
@@ -114,6 +135,7 @@ def predict_images(model, image_dir, metadata_path, input_shape=(64, 64), batch_
     # Data generator for prediction
     datagen = ImageDataGenerator(
     rescale=1.0 / 255.0,
+    zoom_range=0.1,
     validation_split=0.2
     )
 

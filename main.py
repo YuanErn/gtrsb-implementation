@@ -1,12 +1,14 @@
 from knn import knn_classifier
 from cnn import train_cnn, predict_images, create_data_generators
+from svm import run_svm
+from sklearn.preprocessing import StandardScaler
 import pandas as pd
 
 '''
 This is the main entry for the models and evaluation. Preprocessing is run beforehand and just has to run once to save on processing time.
 '''
 def main():
-    run_cnn()
+    run_svm()
     return
 
 def run_knn():
@@ -40,8 +42,8 @@ def run_cnn():
     '''
     train_dir = '/Users/yuanern/Documents/unimelb/Machine Learning/assignment 2/gtrsb-implementation/train'
     metadata_path = '/Users/yuanern/Documents/unimelb/Machine Learning/assignment 2/gtrsb-implementation/trainFeatures/train_metadata.csv'
-    input_shape = (64, 64, 3)
-    batch_size = 32
+    input_shape = (30, 30, 3)
+    batch_size = 16
     epochs = 100
 
     # Create data generators
@@ -63,12 +65,14 @@ def run_cnn():
     # Create a DataFrame with 'id' and 'ClassId'
     submission_df = pd.DataFrame({
         'id': test_metadata['id'],
-        'ClassId': predictions.argmax(axis=1)  # Convert probabilities to class indices
+        'ClassId': predictions.argmax(axis=1) 
     })
 
     # Save the DataFrame to a CSV file
     submission_df.to_csv('cnn/cnn_predictions.csv', index=False)
     print("Predictions saved to cnn_predictions.csv")
+
+
 
 if __name__ == "__main__":
     main()
