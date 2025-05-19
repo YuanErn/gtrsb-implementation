@@ -3,7 +3,7 @@ from cnn import train_cnn, predict_images, create_data_generators
 from svm import run_svm
 from sklearn.preprocessing import StandardScaler
 import pandas as pd
-
+import keras
 '''
 This is the main entry for the models and evaluation. Preprocessing is run beforehand and just has to run once to save on processing time.
 '''
@@ -33,7 +33,7 @@ def run_knn():
     train_metadata = pd.read_csv('testFeatures/test_metadata.csv')
     submission_df = submission_df.merge(train_metadata[['image_path', 'id']], on='image_path', how='inner')
     submission_df = submission_df[['id', 'ClassId']]
-    submission_df.to_csv('knn/submission.csv', index=False)
+    submission_df.to_csv('knn/knn_submission.csv', index=False)
     return
 
 def run_cnn():
@@ -42,8 +42,8 @@ def run_cnn():
     '''
     train_dir = '/Users/yuanern/Documents/unimelb/Machine Learning/assignment 2/gtrsb-implementation/train'
     metadata_path = '/Users/yuanern/Documents/unimelb/Machine Learning/assignment 2/gtrsb-implementation/trainFeatures/train_metadata.csv'
-    input_shape = (30, 30, 3)
-    batch_size = 16
+    input_shape = (32, 32, 1)
+    batch_size = 32
     epochs = 100
 
     # Create data generators
@@ -57,6 +57,7 @@ def run_cnn():
     # Example prediction (optional)
     test_dir = '/Users/yuanern/Documents/unimelb/Machine Learning/assignment 2/gtrsb-implementation/test'
     test_metadata_path = '/Users/yuanern/Documents/unimelb/Machine Learning/assignment 2/gtrsb-implementation/testFeatures/test_metadata.csv'
+    model = keras.models.load_model('cnn/cnn_model.keras')
     predictions = predict_images(model, test_dir, test_metadata_path, input_shape[:2], batch_size)
 
     # Load test metadata to get the IDs
@@ -71,7 +72,6 @@ def run_cnn():
     # Save the DataFrame to a CSV file
     submission_df.to_csv('cnn/cnn_predictions.csv', index=False)
     print("Predictions saved to cnn_predictions.csv")
-
 
 
 if __name__ == "__main__":

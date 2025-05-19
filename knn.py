@@ -2,6 +2,7 @@ from sklearn.model_selection import StratifiedKFold
 from sklearn.preprocessing import StandardScaler
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.metrics import classification_report, accuracy_score, confusion_matrix
+from imblearn.over_sampling import RandomOverSampler
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
@@ -31,8 +32,12 @@ def knn_classifier(csv_path, k=1, n_splits=10):
         X_train_scaled = pd.DataFrame(scaler.fit_transform(X_train), columns=X_train.columns)
         X_test_scaled = pd.DataFrame(scaler.transform(X_test), columns=X_test.columns)
 
-        knn = KNeighborsClassifier(n_neighbors=k)
-        knn.fit(X_train_scaled, y_train)
+        # --- Oversample minority classes in the training set ---
+        ros = RandomOverSampler(random_state=42)
+        X_train_res, y_train_res = ros.fit_resample(X_train_scaled, y_train)
+
+        knn = KNeighborsClassifier(n_neighbors=k, weights='distance')
+        knn.fit(X_train_res, y_train_res)
         y_pred = knn.predict(X_test_scaled)
 
         acc = accuracy_score(y_test, y_pred)
@@ -68,8 +73,8 @@ def knn_classifier(csv_path, k=1, n_splits=10):
     
 
     # Save evaluation results
-    os.makedirs('metrics', exist_ok=True)
-    with open('metrics/knn_kfold_eval.txt', 'w') as f:
+    os.makedirs('knn', exist_ok=True)
+    with open('knn/knn_kfold_eval.txt', 'w') as f:
         f.write(f"Average Accuracy: {avg_acc:.4f}\n\n")
         f.write("Average Classification Report:\n")
         f.write(avg_report.to_string())

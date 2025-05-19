@@ -1,9 +1,12 @@
 import pandas as pd
 import os
+import matplotlib.pyplot as plt
+import numpy as np
 from sklearn.svm import SVC
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report, accuracy_score
+
 
 def run_svm():
     # Paths to training and test data
@@ -49,3 +52,46 @@ def run_svm():
     os.makedirs('svm', exist_ok=True)
     submission_df.to_csv('svm/svm_predictions.csv', index=False)
     print("Predictions saved to svm/svm_predictions.csv")
+
+    C_values = np.arange(1, 11, 0.5)
+    gamma_values = np.arange(0.1, 1.1, 0.1)
+    accuracy_matrix = svm_grid_search(X_train, X_val, y_train, y_val, C_values, gamma_values)
+    plot_svm_grid_search(C_values, gamma_values, accuracy_matrix)
+
+    return 
+
+def svm_grid_search(X_train, X_val, y_train, y_val, C_values, gamma_values):
+    """
+    Performs grid search over C and gamma, returns accuracy matrix.
+    """
+    accuracy_matrix = np.zeros((len(C_values), len(gamma_values)))
+    for i, C in enumerate(C_values):
+        for j, gamma in enumerate(gamma_values):
+            model = SVC(kernel='rbf', C=C, gamma=gamma)
+            model.fit(X_train, y_train)
+            acc = accuracy_score(y_val, model.predict(X_val))
+            accuracy_matrix[i, j] = acc
+    return accuracy_matrix
+
+def plot_svm_grid_search(C_values, gamma_values, accuracy_matrix):
+    """
+    Plots a heatmap of the accuracy matrix for C and gamma.
+    """
+    # Make gamma values slightly smaller (e.g., divide by 10)
+    gamma_values = [g / 10 for g in gamma_values]
+
+    plt.figure(figsize=(8, 6))
+    im = plt.imshow(accuracy_matrix, interpolation='nearest', cmap='viridis')
+    plt.title("Validation Accuracy for SVM Grid Search")
+    plt.xlabel("gamma")
+    plt.ylabel("C")
+    plt.colorbar(im, label="Accuracy")
+
+    plt.xticks(np.arange(len(gamma_values)), [f"{g:.1e}" for g in gamma_values], rotation=90)
+    plt.yticks(np.arange(len(C_values)), [f"{c:.1e}" for c in C_values])
+
+    plt.tight_layout()
+    plt.savefig('svm/svm_grid_search_heatmap.png')
+    plt.show()
+    print("Heatmap saved to svm/svm_grid_search_heatmap.png")
+
