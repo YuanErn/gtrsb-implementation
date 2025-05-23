@@ -3,10 +3,13 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.metrics import classification_report, accuracy_score, confusion_matrix
 from imblearn.over_sampling import RandomOverSampler
+from collections import Counter
+from sklearn.metrics import ConfusionMatrixDisplay
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 import os
+import joblib
 
 def knn_classifier(csv_path, k=1, n_splits=10):
     """
@@ -32,8 +35,10 @@ def knn_classifier(csv_path, k=1, n_splits=10):
         X_train_scaled = pd.DataFrame(scaler.fit_transform(X_train), columns=X_train.columns)
         X_test_scaled = pd.DataFrame(scaler.transform(X_test), columns=X_test.columns)
 
-        # --- Oversample minority classes in the training set ---
-        ros = RandomOverSampler(random_state=42)
+        max_count = max(Counter(y_train).values())
+        sampling_strategy = {cls: max_count for cls in np.unique(y_train)}
+
+        ros = RandomOverSampler(sampling_strategy=sampling_strategy, random_state=42)
         X_train_res, y_train_res = ros.fit_resample(X_train_scaled, y_train)
 
         knn = KNeighborsClassifier(n_neighbors=k, weights='distance')
@@ -49,20 +54,20 @@ def knn_classifier(csv_path, k=1, n_splits=10):
         fold += 1
 
     # Save confusion matrix from the last fold
+        
     os.makedirs('knn', exist_ok=True)
-    plt.figure(figsize=(8, 6))
-    plt.imshow(last_cm, interpolation='nearest', cmap=plt.cm.Blues)
-    plt.title(f'Confusion Matrix (Last Fold)')
-    plt.colorbar()
-    labels = sorted(y.unique())
-    tick_marks = range(len(labels))
-    plt.xticks(tick_marks, labels, rotation=45)
-    plt.yticks(tick_marks, labels)
-    plt.xlabel('Predicted')
-    plt.ylabel('True')
+    fig, ax = plt.subplots(figsize=(16, 16))
+    disp = ConfusionMatrixDisplay(confusion_matrix=last_cm)
+    disp.plot(cmap='Blues', ax=ax, colorbar=True)
+    ax.set_title("KNN Confusion Matrix (Last Fold)", fontsize=25)
+    ax.set_xlabel('Predicted label', fontsize=15)
+    ax.set_ylabel('True label', fontsize=15)
+    plt.xticks(fontsize=8)
+    plt.yticks(fontsize=8)
     plt.tight_layout()
     plt.savefig('knn/knn_confusion_matrix_kfold.png')
-    print("Confusion matrix (last fold) saved to knn_confusion_matrix_kfold.png")
+    plt.close()
+    print("Confusion matrix (last fold) saved to knn/knn_confusion_matrix_kfold.png")
 
     # Compute average accuracy and classification report
     avg_acc = np.mean(accuracies)
@@ -79,6 +84,11 @@ def knn_classifier(csv_path, k=1, n_splits=10):
         f.write("Average Classification Report:\n")
         f.write(avg_report.to_string())
     print("K-Fold evaluation results saved to metrics/knn_kfold_eval.txt")
+
+
+    # Saving the model for ensemble later
+    joblib.dump(knn, 'knn/knn_model.joblib')
+    print("Trained KNN model saved to knn/knn_model.joblib")
     return knn
 
 def tune_k_for_knn(csv_path, k_range=range(1, 21), n_splits=10):

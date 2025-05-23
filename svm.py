@@ -3,23 +3,79 @@ import os
 import matplotlib.pyplot as plt
 import numpy as np
 from sklearn.svm import SVC
-from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import StratifiedKFold
 from sklearn.metrics import classification_report, accuracy_score
-
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 
 def run_svm():
-    # Paths to training and test data
-    train_df_path = 'engineered_df_all.csv'  # PCA-reduced training data
-    test_df_path = 'test_engineered_df.csv'  # PCA-reduced test data
+    # Paths to training and test data (NO HU)
+    # train_df_path = 'summaries_no_hu/engineered_df_all_no_hu.csv'
+    # test_df_path = 'summaries_no_hu/test_engineered_df_no_hu.csv'
+    # test_metadata_path = 'testFeatures/test_metadata.csv'
+
+    # Paths to training and test data (WITH HU)
+    train_df_path = 'summaries_with_hu/engineered_df_all_with_hu.csv'
+    test_df_path = 'summaries_with_hu/test_engineered_df_with_hu.csv'
     test_metadata_path = 'testFeatures/test_metadata.csv'
 
     # Load training data
-    X = pd.read_csv(train_df_path).drop(columns=['image_path', 'ClassId'])
-    y = pd.read_csv(train_df_path)['ClassId']
+    train_df = pd.read_csv(train_df_path)
+    X = train_df.drop(columns=['image_path', 'ClassId'])
+    y = train_df['ClassId']
 
-    # Split into training and validation sets
-    X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
+    # Defining hyperparameters
+    C = 10
+    gamma = 0.001
+
+    # K-Fold Cross-Validation
+    k = 10
+    skf = StratifiedKFold(n_splits=k, shuffle=True, random_state=42)
+    val_accuracies = []
+    val_reports = []
+
+    print(f"Running {k}-fold cross-validation...")
+    for fold, (train_idx, val_idx) in enumerate(skf.split(X, y), 1):
+        X_train, X_val = X.iloc[train_idx], X.iloc[val_idx]
+        y_train, y_val = y.iloc[train_idx], y.iloc[val_idx]
+
+        model = SVC(kernel='rbf', C=C, gamma=gamma)
+        model.fit(X_train, y_train)
+        y_val_pred = model.predict(X_val)
+
+        acc = accuracy_score(y_val, y_val_pred)
+        val_accuracies.append(acc)
+        val_reports.append(classification_report(y_val, y_val_pred, output_dict=True, zero_division=0)) 
+        print(f"Fold {fold} Validation Accuracy: {acc:.4f}")
+
+    cm = confusion_matrix(y_val, y_val_pred)
+    fig, ax = plt.subplots(figsize=(16, 16)) 
+    disp = ConfusionMatrixDisplay(confusion_matrix=cm)
+    disp.plot(cmap='Blues', ax=ax, colorbar=True)
+    plt.title("SVM Confusion Matrix (Last Fold)", fontsize=25)
+    ax.set_xlabel("Predicted ClassId", fontsize=15)
+    ax.set_ylabel("True ClassId", fontsize=15)
+    plt.xticks(fontsize=8)
+    plt.yticks(fontsize=8)
+    plt.tight_layout()
+    plt.savefig("svm/svm_confusion_matrix_kfold.png")
+    plt.close()
+    print(f"\nMean Validation Accuracy: {np.mean(val_accuracies):.4f} ± {np.std(val_accuracies):.4f}")
+
+    weighted_metrics = ['precision', 'recall', 'f1-score']
+    weighted_avgs = {metric: [] for metric in weighted_metrics}
+
+    for report in val_reports:
+        for metric in weighted_metrics:
+            weighted_avgs[metric].append(report['weighted avg'][metric])
+
+    print("\nAverage Validation Classification Report (weighted avg):")
+    for metric in weighted_metrics:
+        avg = np.mean(weighted_avgs[metric])
+        print(f"{metric.capitalize()}: {avg:.4f}")
+
+    # Train on full data for test prediction
+    model = SVC(kernel='rbf', C=C, gamma=gamma)
+    model.fit(X, y)
 
     # Load test data and merge with metadata to get 'id'
     test_data = pd.read_csv(test_df_path)
@@ -30,35 +86,20 @@ def run_svm():
     X_test = test_data.drop(columns=['image_path', 'id'])
     test_ids = test_data['id']
 
-    # Train the SVM
-    model = SVC(kernel='rbf', C=10, gamma=0.1)
-    model.fit(X_train, y_train)
-
-    # Evaluate on the validation set
-    y_val_pred = model.predict(X_val)
-    print("Validation Accuracy:", accuracy_score(y_val, y_val_pred))
-    print("\nValidation Classification Report:\n", classification_report(y_val, y_val_pred))
-
     # Make predictions on the test set
     y_pred = model.predict(X_test)
 
     # Create a DataFrame with 'id' and 'ClassId'
     submission_df = pd.DataFrame({
-        'id': test_ids,  
+        'id': test_ids,
         'ClassId': y_pred
     })
 
-    # Ensure the output directory exists then save
     os.makedirs('svm', exist_ok=True)
     submission_df.to_csv('svm/svm_predictions.csv', index=False)
     print("Predictions saved to svm/svm_predictions.csv")
 
-    C_values = np.arange(1, 11, 0.5)
-    gamma_values = np.arange(0.1, 1.1, 0.1)
-    accuracy_matrix = svm_grid_search(X_train, X_val, y_train, y_val, C_values, gamma_values)
-    plot_svm_grid_search(C_values, gamma_values, accuracy_matrix)
-
-    return 
+    return
 
 def svm_grid_search(X_train, X_val, y_train, y_val, C_values, gamma_values):
     """

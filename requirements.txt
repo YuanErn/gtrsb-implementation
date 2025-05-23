@@ -1,8 +1,11 @@
-pandas
 numpy
+pandas
+scikit-learn
 matplotlib
 seaborn
-scikit-learn
-tensorflow
+opencv-python
 Pillow
+tensorflow
+keras
 imblearn
+joblib
